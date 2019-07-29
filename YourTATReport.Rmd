@@ -1,0 +1,103 @@
+---
+title: "Monthly Lab TAT Report"
+author: "Your Name Here"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE)
+ 
+library(tidyverse)
+library(lubridate)
+
+```
+
+### Report date: `r format(Sys.Date(), format="%B %d %Y")`
+
+  
+
+```{r data, include = FALSE}
+#read in data, clean up and calculate TAT in minutes
+data <- read_csv("Data_Files/lab_data.csv") #read in data
+glimpse(data) #take a quick look at formatting
+
+data <- data %>%
+          mutate_if(is.character, as.factor) %>%
+          mutate(TAT = as.integer(difftime(RESULT_DATE, ORDERED_DATE, 
+                                           units = "min")), 
+                 lab.TAT = as.integer(difftime(RESULT_DATE, RECEIVED_DATE, 
+                                               units = "min")),
+                 month = month(RESULT_DATE, label = TRUE, abbr = TRUE),
+                 year = year(RESULT_DATE)) %>%
+          filter(TAT > 5, TAT < quantile(TAT, 0.99), 
+                 lab.TAT > 5, lab.TAT < quantile(lab.TAT, 0.99)) #treat outliers
+```
+
+
+## Data  
+This report describes laboratory turn-around-times (TAT) for tests ordered between `r format(min(data$ORDERED_DATE), format="%B %d %Y")` and `r format(max(data$ORDERED_DATE), format="%B %d %Y")`. TAT values less than 5 minutes or greater than the 99th percentile were excluded from calculations.  
+
+  
+
+## Calculations  
+Turn-around-times in minutes, are calculated as follows:  
+  * TAT = Result time (min) - Order time (min)  
+  * Lab TAT = Result time (min) - Receive time (min)  
+
+  
+
+## Summary Tables for each Location by Test (All Priorities)    
+```{r summary, include = FALSE}
+
+locations <- levels(data$LOCATION_TYPE)
+Summary <- vector("list", length(locations))
+
+for (i in locations) {
+
+  Summary[[i]] <- data %>%
+    group_by(TEST, LOCATION_TYPE) %>% 
+    filter(LOCATION_TYPE == i) %>%
+    summarize(avg.TAT = round(mean(TAT),0),
+                    avg.lab.TAT = round(mean(lab.TAT),0),
+                    max.TAT = max(TAT),
+                    max.labTAT = max(lab.TAT),
+                    n.test = n()) %>%
+    select(-LOCATION_TYPE)
+}
+
+```
+
+
+```{r print tables, results='asis'}
+#want to print the tables that are now items in a list (items 5-8, in this case)
+
+for (i in 5:8) {
+  
+print(knitr::kable(Summary[[i]],
+                   col.names = c("Test", "Avg TAT", "Avg Lab TAT",
+                                    "Max TAT", "Max Lab TAT", "N"),
+                   caption = names(Summary[i])))
+}
+```
+
+  
+  
+  
+## Plots of Lab TAT for Stats by Test and Location  
+```{r plots}
+stat.data <- data %>%
+            filter(PRIORITY == "S")
+
+ggplot(stat.data, aes(x = LOCATION_TYPE, y = lab.TAT)) +
+  geom_violin() +
+  geom_point(stat = "summary", fun.y = "mean", color = "red", size = 2) +
+  labs(x = "", y = "Lab TAT (min)") +
+  theme_classic() +
+  coord_flip() + 
+  facet_wrap(~TEST)
+```
+
+

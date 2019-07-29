@@ -1,0 +1,460 @@
+---
+title: |
+  | Stat of the Union
+subtitle: |
+  | Getting Started with R for Laboratory Medicine  
+  | Sunday Aug 04, 2019
+  | AACC 2019, Anaheim CA
+author: "Stephen Master, Dan Holmes, Will Slade, Janet Simons"
+date: "7/23/2019"
+documentclass: article
+output:
+  pdf_document:
+    fig_height: 3.75
+    fig_width: 5
+    number_sections: yes
+    toc: yes
+#    dev: CairoPDF
+header-includes: \usepackage{exercise}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(dev='png', fig.align = 'center', fig.height = 4, fig.width = 6) 
+library(tidyverse)
+
+```
+
+# Lesson 5: Basic statistics and regression with R
+
+OK, we have some data, it's formatted the way we want, and we know how to do some basic calculations with it.  Let's get fancier.  In order to dig in and really understand data from our clinical laboratory, we often need to perform some sort of statistical test.  Since R began life as a statistical language, it is ideally suited for this task.  Most, if not all, common statistical procedures--t-tests, nonparametric comparisons, ANOVA, you name it--have built-in functions within R.  Better yet, because R is so widely used within the statistical community, pretty much any statistical procedure that you can think of or will read about is available as an R package.  This makes R a seriously powerful tool for analyzing your lab data--much, much more powerful than Excel.  Let's look at how to do some simple statistical calculations in R.
+
+## Correlation
+Let's start with one of the most common situations.  We often want to calculate the correlation between two variables (perhaps we want to know whether there's a nice, linear relationship between lab results from two different platforms).  The simplest way to calculate this in R is using the function `cor()`. For example:
+
+```{r}
+x <- c(1,2,3,4,5)
+y <- c(1.1,1.9,7,6,8)
+cor(x,y)
+```
+But be warned: `cor()`, like many R functions, needs you to declare what you want done with missing values. To see what we mean:
+
+```{r}
+x <- c(1,2,3,4,NA)
+y <- c(1.1,1.9,7,6,8)
+cor(x,y)
+```
+
+This gives us NA as a result with no error. Useless. `help(cor)` tells us what is going on.
+
+```{r}
+cor(x,y,use = "complete.obs") #not terribly intuitive
+```
+
+The `mean()` function also does not like NAs, but the syntax of handling them is more widely used throughout the language (specifically, `mean(x,na.rm = TRUE)`). 
+
+Onward...let's load in some data comparing tube types:
+
+```{r}
+tube.data <- read.csv("Data_Files/tube_data.csv")
+head(tube.data)
+```
+Now, what do you suppose this produces?
+
+```{r}
+cor(tube.data$LiHep, tube.data$EDTA)
+```
+Conveniently, we can also get `cor()` to do multiple correlations at once.
+
+```{r}
+cor(tube.data[,2:4])
+```
+
+As nice as this is, we are not a huge fans of `cor()` because it lacks p-values and confidence intervals for the correlation. For this reason, we often use `cor.test()` (which automatically copes with missing values, by the way).
+
+```{r}
+x <- c(1,2,3,4,NA)
+y <- c(1.1,1.9,7,6,8)
+cor.test(x,y)
+```
+
+The drag is that `cor.test()` does not calculate the whole correlation matrix for you...but it does give you just about everything else you would want to know about the correlation. 
+
+This brings us to another side point. When you are doing a statistical test like this, you can store the whole analysis in a variable that you can call on later to, say, put in a plot or use in another calculation.
+
+```{r}
+my.cor <- cor.test(tube.data$EDTA,tube.data$SST)
+my.cor # displays
+str(my.cor) # tells you all the variables stored in my.cor
+my.cor$estimate # is your correlation
+paste(round((my.cor$estimate)^2,3), "is my R-squared, the coefficient of determination")
+```
+
+## Comparing Mean and Central Tendency
+### The t-test
+
+As you know, the t-test is used to compare the means of two groups to see if there is a statistically significant difference. Usually, our "null hypothesis" is that there is no difference between the groups, and this is how we most often use this test in clinical chemistry. 
+
+When we are comparing groups that are not *a priori* connected (e.g. testosterone levels in males from Philadelphia to testosterone levels in males from British Columbia), we would use the t-test in its unpaired form. The syntax is: `t.test(x,y)`--where `x` and `y` are vectors of the data points for each group. 
+
+However, we are very often  comparing data that is paired--e.g., collections from the same individuals on different tube types, or lipid levels pre- and post-statin therapy, or Vitamin D levels in summer vs. winter for the same people. 
+
+If we are doing a paired t-test, the syntax is only slightly different: `t.test(x,y, paired = TRUE)`. 
+
+### Exercise
+* Use t-tests to compare the mean results from the three different tube types.
+  + Are there difference in results by the different tube types?
+  + Why is doing multiple t-tests bad practice?
+  + What is the "right" way to do this analysis?
+  
+```{r, include = FALSE}
+###Solution###
+tube.data <- read.csv(file = "Data_Files/tube_data.csv")
+t.test(tube.data$LiHep,tube.data$EDTA,paired = TRUE)
+t.test(tube.data$LiHep,tube.data$SST,paired = TRUE)
+t.test(tube.data$EDTA,tube.data$SST,paired = TRUE)
+```
+
+If you look at `help(t.test)`, you can find the syntax for changing the confidence level to something other than 0.95, using one-sided vs. two sided, etc.
+
+For completeness: `t.test()` has an alternate syntax for data that is arranged so that tube types are stored as factors all in one column and results are stored in a second column. To show you, we will store the tube type data differently. 
+
+(Oh, by the way: this uses the "tidyr" library, so make sure you run `install.packages("tidyr")` before moving on...)
+
+```{r, results="hide"}
+library(tidyr) 
+tube.data.2 <- gather(tube.data, "Tube", "PTH", -Subject)
+tube.data.2 # do this on you own to see what happens
+
+# also, since this approach requires only two factors
+#   in the column for comparison:
+data.for.t.test <- subset(tube.data.2, Tube=="EDTA" | Tube=="SST")
+data.for.t.test # try this also
+```
+```{r}
+t.test(PTH ~ Tube, data=data.for.t.test, paired=TRUE)
+```
+
+### The Problem of Multiple Comparisons
+You can circumvent the whole problem of multiple comparisons  by using the function `pairwise.t.test()`, which makes corrections in the p-value to adjust for the fact that you are doing the t-test multiple times. This prevents the so-called "Type I Error", which is a "false positive" (rejection of the null hypothesis when it is actually true, or--loosely--erroneously declaring a difference when there is none). 
+
+In any case, if we apply:
+
+```{r,results = "hide"}
+pairwise.t.test(tube.data.2$PTH,tube.data.2$Tube ,p.adj = "bonf",paired = TRUE)
+```
+
+We automatically get all the p-values for the pairwise comparisons with $p<0.05$ considered significant **after the multiple comparisons effect has been accounted for**. What does our output mean?
+
+```{r,echo = FALSE}
+pairwise.t.test(tube.data.2$PTH,tube.data.2$Tube ,p.adj = "bonf",paired = TRUE)
+```
+     
+Here we have chosen the very conservative Bonferroni method to adjust the p-value. There are multiple other less conservative approaches to the p-value adjustment. Type `help(p.adjust)` for details. 
+
+### The Wilcoxon Signed Rank and Rank Sum Tests
+
+The t-test assumes that the results from the two groups to be compared are normally distributed about the respective means. While this is something we can test for (with the Shapiro Wilk Test or the Kolmogorov Smirnov test), you can also convince yourself with a histogram that it is not likely true.  When you want to compare two groups in a "non-parametric" fashion (lingo for "no assumptions about distribution"), you can use the Wilcoxon Signed Rank Test (which is the non-parametric analog of the paired t-test). If the data is not paired, the Wilcoxon Rank Sum Test is performed when we use the same syntax. This is the analog of the unpaired t.test and is also called the "Mann Whitney" test.  
+
+```{r, warning = FALSE}
+wilcox.test(tube.data$EDTA,tube.data$SST, paired = TRUE) 
+#alternatively
+wilcox.test(PTH ~ Tube,data = data.for.t.test, paired = TRUE)
+```
+
+### Basic ANOVA
+
+Obviously, ANOVA is a course unto itself - but it is straightforward to do a basic (unpaired) ANOVA which is the multivariable analog of the (unpaired) t-test. We can make some mock data for this. Suppose we are comparing average vitamin D concentrations in unsupplemented individuals from Norway, Germany and Italy -- 100 otherwise matched subjects from each country. 
+
+```{r}
+#fake data
+set.seed(100)
+norway.D <- rnorm(100,70,20)
+deutsch.D <- rnorm(100,75,20)
+italy.D <- rnorm(100,80,20)
+
+#put in a data frame
+nationality <- c(rep("N",100), rep("D",100), rep("I",100))
+vitD <- c(norway.D, deutsch.D, italy.D)
+my.data <- data.frame(nationality,vitD)
+str(my.data) #note what R did to the nationality!
+fit <- aov(vitD ~ nationality)
+summary(fit)
+```
+
+### Repeated Measures ANOVA
+
+Performing an ANOVA analysis that is suitable to compare the PTH results from the different tube types is less trivial. This would be a within-subjects or "repeated measures" ANOVA. The code is as follows but the subject is beyond the scope of time that we have.
+
+```{r}
+tube.data.2$Subject <- factor(tube.data.2$Subject) #aov needs the subjects to be factors
+fit <- aov(PTH ~ Tube + Error(Subject/Tube), data=tube.data.2)
+summary(fit)
+```
+
+
+## Regression
+
+It's time to *progress* to the next topic: *regression* (ha! See what we did there?).  Regression turns up all the time in clinical chemistry: calibration curves, assay comparisons during validation, harmonization, looking at relationships between analytes...very useful.
+In this section, we will cover ordinary least squares (OLS), Deming, and Passing Bablok. These latter two forms of regression have found a neurotic devotion in the Clinical Chemistry literature, and so you have to use them when you publish. They are not available in Excel. The nice thing about Passing Bablok is that it is very resistant to the effect of an outlier, though it is certainly not the only form of robust regression.
+
+
+### Ordinary Least Squares
+Let's start with OLS and let's use the tube-type dataset we used in the last section.  Let's plot the PTH results of EDTA and SST against one another, since we know that there are statistical differences in the mean and median. The function we will use is called `lm()`
+
+```{r}
+tube.data <- read.csv(file = "Data_Files/tube_data.csv")
+OLS.reg <- lm(EDTA ~ SST,data = tube.data)
+summary(OLS.reg)
+#alternative syntax
+lm(tube.data$EDTA ~ tube.data$SST)
+```
+
+Now let's look at all of the things that R calculates:
+
+```{r}
+str(OLS.reg)
+```
+
+This is probably more information than you wanted for right now, but it's a fairly complete list of the things that you might like to know at some point.  To take a look at your data and add the regression line, you can type:
+
+```{r}
+plot(EDTA ~ SST, data = tube.data, main = "OLS Regression")
+#to add the regression line
+abline(OLS.reg$coefficients)
+# abline(OLS.reg$coefficients[1], OLS.reg$coefficients[2]) does same thing
+# abline(OLS.reg) also does the same but is less intuitive
+# lines(tube.data$SST,OLS.reg$fitted.values) does the same thing
+#
+# to add the line of identity...
+abline(0,1, col = "red", lty = 2)
+```
+
+If you enter `plot(OLS.reg)`, you can cycle through some diagnostic plots of the regression.
+
+BONUS MATERIAL:
+R just keeps getting easier.  If you like, the `broom` package will give you a nice data frame-like variable with all the things you might want from `lm()`.  Here's how it looks:
+```{r}
+library(broom)
+OLS.reg <- lm(EDTA ~ SST,data = tube.data)
+tidy(OLS.reg)
+```
+Even better, the `broom` package can also give you the residual errors (the difference between your regression line and the original data at every point) using a function called `augment()`.
+```{r}
+augment(OLS.reg)
+```
+
+Pretty easy, huh?
+
+## Weighted Least Squares
+Now, sometimes you want to perform weighted regression. This is what we do on the mass spectrometer when we want to improve the recoveries of the low-level calibrators and the expense of the high level calibrators. In other words, when accuracy at the low end is clinically required, we weight the regression.  How we weight is fairly arbitrary, but the bigger the weight, the more fitting effect a point has.
+
+```{r}
+w.OLS.reg <-  lm(EDTA ~ SST, data = tube.data, weights = 1/EDTA)
+summary(w.OLS.reg)
+plot(EDTA ~ SST, data = tube.data, main = "Weighted OLS Regression")
+#to add the regression line
+abline(w.OLS.reg, col = "red")
+#put the unweighted line in for comparison
+abline(OLS.reg, col = "gray")
+#What do you notice?
+```
+
+### Exercise
+* Here is some fake cal curve data that shows the characteristic flattening we see when we are trying to extend our linear range too far:
+
+```{r}
+conc <- seq(from = 1, to = 50, by = 10)
+response <- (conc/20)^(0.7)
+plot(conc, response, xlab = "Concentration", ylab = "(Peak Area of Analyte)/(Peak Area of IS)")
+```
+
+  + Find and plot the OLS regression line. Add it to the plot using abline() in green.
+  + Find and plot the $1/x^2$ weighted OLS regression line. Add it to the plot using `abline()` in purple.
+  + What is the effect of the weighting?
+  
+```{r, include = FALSE}
+###Solution###
+tube.data <- read.csv(file = "Data_Files/tube_data.csv")
+OLS.reg <- lm(EDTA ~ SST,data = tube.data)
+conc <- seq(from = 1, to = 50, by = 10)
+response <- (conc/20)^(0.7)
+plot(conc, response, xlab = "Concentration", ylab = "(Peak Area of Analyte)/(Peak Area of IS)")
+lin.mod <- lm(response~conc)
+w.lin.mod <- lm(response~conc,weights = 1/conc^2)
+abline(lin.mod, col = "green")
+abline(w.lin.mod, col = "purple")
+legend("bottomright",c("unweighted","weighted"),lty = c(1,1), col = c("green", "purple"))
+```
+
+## Outlier Effects in OLS
+Outlier effects are significant with OLS regression. To illustrate, we can do the following (you don't need to understand the code, you just need to see the effect an outlier has):
+
+```{r}
+outlier.x <- tube.data$SST
+outlier.x[1] <- 20 #introduce a single outlier point
+summary(lm(tube.data$EDTA ~ outlier.x)) 
+plot(outlier.x, tube.data$EDTA, main = "Effect of an outlier")
+abline(lm(tube.data$EDTA ~ outlier.x), col = "blue") #regression with outlier
+abline(OLS.reg, col = "red") #regression without outlier
+legend("bottomright",c("with outlier","without outlier"), lty = c(1,1), col = c("blue","red"))
+points(20, 13.2, col = "red")
+text(17, 13.2,"Outlier", col = "red")
+arrows(x0 = 18.2, y0 = 13.2, x1 = 19.5, y1 = 13.2, length = 0.1, col = "red")
+```
+
+## Passing Bablok Regression
+Now that you have seen the effect of an outlier, you can see that it would be great to have a regression method that more resistant to the effect of outliers. Passing Bablok regression is such a method. However, this function is not built-in to R. The good thing is that there are packages that include it and we can install them. Statisticians at Roche have contributed a package called "mcr" that contains PB regression (remember to run `install.packages("mcr")` before this next step).
+
+```{r}
+library("mcr")
+PB.reg <- mcreg(tube.data$SST,tube.data$EDTA, method.reg = "PaBa")
+plot(PB.reg) # plots a nice generic plot automatically
+```
+
+### Exercise
+* Use the `mcreg()` function to show that PB regression is more resistant to an outlier than OLS regression. For your x data use outlier.x and for your y data use  tube.data\$EDTA. Plot the regression line. Use `abline()` to add the regression line from the PB.reg model shown immediately above.
+
+Note that PB regression cannot be weighted by virtue of how the method works. There is no minimization of residuals, so there is nothing to weight.  PB regression is very computationally intensive for larger data sets. For this reason, the code authors of the "mcr"" package have developed a method called `PaBaLarge` for large data sets. It's not exact, but it's very close. It would be called like this:
+```{r, results = "hide"}
+PB.reg <- mcreg(tube.data$SST,tube.data$EDTA, method.reg = "PaBaLarge")
+```
+
+```{r,include = FALSE}
+###Solution###
+library(mcr)
+tube.data <- read.csv(file = "Data_Files/tube_data.csv")
+PB.reg <- mcreg(tube.data$SST,tube.data$EDTA, method.reg = "PaBa")
+plot(PB.reg) # plots a nice generic plot automatically
+
+#make an outlier and repeat
+outlier.x <- tube.data$SST
+outlier.x[1] <- 20 #introduce a single outlier point
+PB.reg.outlier <- mcreg(outlier.x,tube.data$EDTA)
+abline(-1.487475,1.329158, col = "green") #the straightforward way
+#abline(PB.reg.outlier@glob.coef, col = "green") #the slicker way
+legend("bottom",c("without outlier","with outlier"), lty = c(1,1), col = c("blue","green"))
+```
+
+## Deming Regression
+
+OLS regression assumes that there is no error in the x-axis data. This is only true if the x-axis is mass spectrometry and the y-axis is an immunoassay (ba-dum-*ching*). OK--that was facetious. Deming regression also assumes that the ratios of the variances (i.e. CVs) is known for the two methods. This can only be meaningfully known if both x and y results are run in duplicate. Generally we don't do this because of the expense.  For the most part, if the precision behavior of the two methods is approximately the same, then this value, called $\delta$, is taken to be its default value of 1.  The "mcr" package has both a Deming and a weighted Deming regression.
+
+```{r, results = "hide"}
+Deming.reg <- mcreg(tube.data$SST,tube.data$EDTA, method.reg = "Deming")
+plot(Deming.reg)
+WDeming.reg <- mcreg(tube.data$SST,tube.data$EDTA, method.reg = "WDeming")
+plot(WDeming.reg)
+```
+
+BONUS: If you do not like the syntax of the "mcr" package approach (because it uses a weird class for its results), you can also use the "MethComp" package (<http://cran.r-project.org/web/packages/MethComp/MethComp.pdf>) or "Deming" (<http://cran.r-project.org/web/packages/deming/deming.pdf>) package.  Both have Deming and PB regression with output more similar to what you have seen before. 
+
+
+## Non-Linear Regression
+
+OK, so much for linear regression.  Now, fitting lines to data often works fairly well.  When it does, linear regression is great.  Unfortunately, though, the world isn't always linear.  It is more than occasionally necessary to fit a series of points that lie on a curve.  For this next technique, we have to have some idea what shape of function we want to fit to our data...but if we do, based on some reasoned physical principle, we can determine the "best fit" using any function you want: polynomial, exponential, sinusoidal, etc.
+
+Just to illustrate the principle, let's take a common task as an example.  When we estimate the LOQ (limit of quantification) for an assay, we typically have to determine the level at which we hit some critical %CV (say, 20%CV).  Suppose that you have the following data for the precision of a cortisol assay at different concentrations (ug/dL).  Enter the following initial data into R. 
+```{r}
+cort <- c(0.04,0.08,0.11,0.18,0.37,0.73,1.1)
+cv <- c(30, 25, 17,13,6,4.5,5)
+cv.data <- data.frame(cort,cv)
+plot(cort,cv)
+```
+
+...giving this graph.
+
+Now we can invoke the `nls()` function, which performs non-linear least squares. The syntax is `nls(formula, data, start)`. The `formula` is the functional form you want to fit to with unknowns included as variables, the `data` is the data you are fitting (in this case `cort` and `cv`), and `start` is a list of your best initial guesses for your unknowns.
+
+In our case, after looking at the graph, we decide that we are going to fit these data with a hyperbolic function.  We are going to make no assumptions about the parameters of our function. 
+We will say that $cv=A/(cort-B)+C$, where $A, B,$ and $C$ are unknowns.  We will start with guess that $A$ is 1, and we'll let $B$ and $C$ start at 0 (this might seem like magic, but we'll explain in a minute where the guess for $A$ comes from). We could do better, but it illustrates the process.
+
+```{r}
+cort.reg<-nls(cv~A/(cort-B)+C, data=cv.data,start=list(A=1,B=0,C=0),trace=TRUE)
+summary(cort.reg)
+```
+
+The parameter trace=TRUE shows the work that `nls()` is doing as it tries to find a solution from the start values.
+
+-------------------------------------------------------------------------
+
+SIDE NOTE:
+
+If the start values really stink, `nls()` will choke and tell you so.  You will need to find better guesses for the start values. This is a broad topic that is beyond the scope of our discussion, but we promised that we would talk about how we guessed at A=1.  We could start by asking what a simpler function (say, $cv=A/cort$) would look like.  If we fit that simpler function, we can get the following:
+```{r}
+c.reg <- nls(cv~A/cort, data=cv.data, start=list(A=0), trace=TRUE)
+```
+Since $A$ ends up pretty close to 1, we can plug that into our original formula with $B=0$ and $C=0$.  If we had wanted to get even closer, we could have plugged in 1.45.  Sometimes you can ignore all this and just plug in 1 for everything and have it work...but not always.  When you start getting weird errors, come back and reread this section.
+
+-------------------------------------------------------------------------
+
+**OK, we were successful**
+
+So now I can show my fit:
+
+```{r}
+cort.fit <- seq(from=0, to=1.2, by=0.005) # make a bunch of tightly spaced points
+cv.fit <- predict(cort.reg , list(cort=cort.fit)) # let our regression predict
+plot(cort,cv)
+lines(cort.fit,cv.fit,col="coral") # ...and plot it
+```
+
+Now it's time to estimate our LOQ.  Let's look at our fitted line for a point near 20%:
+```{r}
+which((abs(cv.fit-20))<0.1) #tells us if there are any fitted values of the cv that are within 0.1% of 20%
+cort.fit[20] #result of the which function ? gives 0.095 back
+plot(cort,cv)
+lines(cort.fit,cv.fit,col="coral")
+abline (h = 20, col = "red",lty = 2)
+abline(v = 0.095, col = "red", lty = 2) #to confirm
+```
+And there you have it--a nonlinear curve fit to estimate the measured level of an analyte that we're comfortable reporting numerically!
+
+Note that we didn't have to use a hyperbolic fit with $nlm()$; we could have used an exponential function, a $sin()$ function...pretty much anything we thought looked like it could provide a reasonable fit.
+
+## Putting it all together: Linearity Testing
+
+Let's try one more application that will let us use multiple types of regression. The CLSI guidelines suggest evaluation of linearity using the method of Emancipator and Kroll. In this approach, the data is fit with a linear regression (OLS, not Deming or PB; why?), then is it fit with quadratic regression, and then cubic regression. The quadratic and cubic fits are compared to each other based on which one has the lowest summed squared residuals, and the winner is then compared to the linear fit using a difference plot.
+
+We have provided calibration curve data in the file "Cal_Curve_Data.csv". After importing the data, we will first determine the linear regression fit with $1/x^2$ weighting. This is accomplished by including the option `weights = 1/conc^2`.
+
+```{r}
+###Solution###
+cal.data <- read.csv(file = "Data_Files/cal_curve_data.csv",  header = TRUE, sep = ",")
+#linear
+lin.mod <- lm(signal~conc, data = cal.data, weights = 1/conc^2)
+```
+OK, now we want to generate quadratic and cubic regressions for comparison.  We can use the $nlm()$ function that we learned about in the last section.  We will
+perform quadratic regression by fitting the curve to a function of the form: `signal ~ A + B*conc + C*conc^2`. It likely does not matter if we weight the regression, but for consistency we will weight with $1/x^2$. Similarly, we'll perform cubic regression by fitting the curve to a function of the form: `signal ~ A + B*conc + C*conc^2 + D*conc^3`.
+```{r}
+#quadratic
+quad.mod <- nls(signal~A+B*conc+C*conc^2,data = cal.data, start = list(A = 0,B = 1,C = 0), weights = 1/conc^2)
+#cubic
+cube.mod <- nls(signal~A+B*conc+C*conc^2+D*conc^3,data = cal.data, start = list(A = 0,B = 1,C = 0,D = 0), weights = 1/conc^2)
+```
+
+OK, so which of the two polynomial fits is best?
+```{r}
+summary(quad.mod)
+summary(cube.mod)
+```
+
+For the sake of argument, let's suppose we can tolerate up to 5% non-linearity. We can generate a difference plot of the fitted values of the best polynomial fit against the linear fit.  This will then allow us to estimate how far our linear range extends...
+```{r}
+# first do a traditional plot of the fits...
+plot(cal.data$conc,cal.data$signal)
+lines(cal.data$conc,predict(lin.mod), col = "blue")
+lines(cal.data$conc,predict(cube.mod), col = "red")
+# ...now prepare a difference plot
+y <- (predict(cube.mod)-predict(lin.mod))/cal.data$conc*100
+x <- cal.data$conc
+plot(x,y,type = "l", ylim = c(-10,10), ylab = "Difference between Cubic and Linear (%)",xlab = "Concentration")
+abline(h = 0)
+abline(h = -5, lty = 3)
+abline(v = 808,lty = 3)
+#Linear to about 800
+```
+
+Take a deep breath--this section was a challenge (pretty useful, though!).  Don't be discouraged if it seemed to fly by the first time; you have the notes and all the code, and if necessary you can give it another try when you're fresh and rested.
+
+...and congratulations!  You've taken your first steps toward impressing your colleagues as an R stats genius!
