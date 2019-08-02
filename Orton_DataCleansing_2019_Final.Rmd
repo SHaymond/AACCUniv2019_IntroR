@@ -1,0 +1,539 @@
+---
+title: |
+  | Data Cleansing: I've Tried Scrubbing Even Soaking
+subtitle: |
+  | Getting Started with R for Laboratory Medicine
+  | Sunday Aug 04, 2019
+  | AACC 2019, Anaheim CA
+author: "Dennis Orton"
+date: "7/23/2019"
+documentclass: article
+output:
+  pdf_document:
+    fig_height: 3.75
+    fig_width: 5
+    number_sections: yes
+    toc: yes
+geometry: "left=3cm, right=3cm, top=2cm, bottom=2cm"
+#    dev: CairoPDF
+header-includes: \usepackage{exercise}
+---
+
+# Lesson 3: Cleansing and beautifying data - garbage to gold
+
+Lets face it, a real-life data set is never going to be as clean as the examples we will give you in a controlled environment such as a workshop with a time limit, so we're not likely going to be able to cover every situation you may find yourself in. What we can do is try to give you some examples of the types of data formatting issues we have faced in our experiences and show you some examples of how to deal with troublesome data in general. 
+
+The main data formats that we encounter are factor, numeric, character, and date. The purpose of this section is to review these formats, how to convert between them, and how to "clean" imperfections out of the data to generate usable datasets. we will start with general data structure and work out from there.
+
+## Packages
+Before we can start,we will have to install and load some important packages. This is because the 'tidyverse' does not exist in 'base' R (that is, the pre-loaded set of function which are installed when you install the R program). Rather, the tidyverse is a set of packages. Packages are themselves sets of functions which have been written by whomever authoured the package. These user-created functions have been 'packaged' and made available for anyone to download and use.
+
+Packages are what makes R great. Lots can be done in base R but often to acheive what you want, you end up having to write your own functions. This is fine if you like programming and find coding your own functions enjoyable. Sometimes, though, we just want to 'get it done' - and whatever 'it' is that you are trying to do, chances are that someone out there has done it before and written a package for you to make it easier.
+
+A final word about packages - they are only as good as the person who wrote them. The tidyverse is a group of packages which have been written by Hadley Wickham (who created RStudio) and his team - which means that we can rely on them being functional, updated and usually bug-free. The same cannot always be said of smaller packages, so if you are ever poking around for a package to fill a niche need, read the documentation and do some google searches to see how others have been able to work with the package before spending too much time trying to code with it.
+
+### Exercise
+* Hopefully you installed the tidyverse when you first installed R as per the pre-course instructions. Just in case, the following code will install the tidyverse package if it is not already there. 
+```{r, eval = FALSE}
+if("tidyverse" %in% rownames(installed.packages()) == FALSE) 
+  {install.packages("tidyverse")}
+```
+This command asks R to download the most current version of the tidyverse from CRAN, which is an online package repository. Note that you need to be connected to the internet for this to work.
+
+Since quite a few packages are being downloaded, this may take a few minutes. Perhaps a good time for a coffee break.
+
+Once tidyverse is installed, we need to load it by calling library():
+```{r, eval = FALSE}
+library(tidyverse)
+```
+You only need to install a package once, but you will need to load any packages you need each time you restart R.
+
+## Setting up and formatting your data
+
+The most common form of data structure in the Clinical Lab is likely going to be a `dataframe`. Whether you are importing `.csv` files to plot patient comparison data, or want to summarize your QC running mean and SD, this is likely going to be your format of choice. For this section, we will start by synthesizing a "practice" data set. 
+
+Note that if you ever post questions online, you will need to know how to generate a "representative" data set, so knowing how to generate a dataframe can be helpfull as well! 
+
+```{r}
+# Start by constructing a dataframe
+date <- c("June 28, 2019", "June 29, 2019", "June 30, 2019",
+          "July 1, 2019", "July 2, 2019")
+time <- c("18:45", "16:36", "7:30", "14:22", "12:36")
+patient.ID <- c("A", "B", "C", "D", "E") # Here is a vector of patient IDs
+result <- c(5.3, 6.4, 4.1, 7.7, 5.3) # Here is a vector of results
+df <- data.frame(patient.ID, result, date, time) 
+# This generates a dataframe with four columns (variables) and five rows (observations)
+df
+```
+
+Never assume that R has interpreted what you plan to do with this dataframe correctly. It's good practice to always check the format of your data before moving on! 
+
+```{r}
+str(df)
+```
+
+Notice that the function `data.frame()` has interpreted the date and patient.ID variables as Factors! This is an issue if we are going to try to summarize these results by date or by patient ID. To change these results to character variables, we can use `as.character()` or just tell R that we want to import them as characters to begin with. 
+
+```{r}
+df <- data.frame(patient.ID, result, date, time, stringsAsFactors = FALSE)
+str(df)
+```
+
+Okay, now we have something to work with. From here we can change the formats for each variable as necessary.
+
+```{r}
+# Patient.ID to a character variable
+df$patient.ID <- as.character(df$patient.ID) 
+# This was already numeric, but I just wanted to show you how to do this
+df$result <- as.numeric(df$result) 
+```
+
+Dates are a little more complicated ...
+
+## A sign of the times:`lubridate()`
+
+The `lubridate()` package allows us to deal with dates and times and do algebra on them as we would with other vectors. This represents a major advantage over the handling of dates using base R packages.
+
+Lubridate makes logical assumptions about what you probably mean based on typical date formats. 
+
+The functions that lubridate uses are `mdy()`,  `ymd()` and  `dmy()`. They have very predictable behavior.
+
+```{r message=FALSE}
+library(lubridate)
+
+mdy("Aug-20,1755")
+mdy("Aug/20/1755")
+mdy("08-20-1755")
+mdy("08201755")
+mdy("August 20, 1755")
+mdy("August 20 1755")
+#all work perfectly without any explicit statements about format.
+```
+
+The real gold with lubridate is how it can handle times too!
+
+```{r}
+#calculating the number of days since the Declaration of Independence
+then <- mdy_hms("July 04,  1776 14:32:45")
+then
+now <- ymd_hms(Sys.time())
+now
+delta <- difftime(now, then, units = "days")
+delta #wow
+
+#calculating the number of days Canada has been a country
+then <- mdy_hms("July 01,  1867 11:17:21")
+then
+now <- ymd_hms(Sys.time())
+now
+delta <- difftime(now, then, units = "days")
+delta
+```
+
+Now lets apply the `dmy()` and `dmy_hm()` formats to our `df` dataframe.
+
+```{r}
+df$date <- mdy(df$date) # note that I had to change "dmy()" to "mdy()".
+```
+
+It's fairly common for dates and times to not be listed in the same column. We can deal with that in a dataframe by using `paste()`. This function is fairly intuitive, then we can apply the `dmy_hm()` function to format the new column. Working from our previous example:
+
+```{r}
+# paste the date, followed by the time using a space as a separator into a new column
+# called "date.time" in the "df" dataframe.
+date.time <- paste(date, time, sep = " ") 
+df <- data.frame(patient.ID, result, date.time, stringsAsFactors = FALSE)
+df$date.time <- mdy_hm(date.time)
+str(df)
+```
+
+## The Pipe `%>%` 
+
+A common operator you will come accross in R is called the "Pipe", which looks like this `%>%`. It is not used in base R, but is an important feature of processing data in the tidyverse such as in the `dplyr` package. Fundamentally it is meant to simplify complex formulae that may require multiple sets of parentheses or nested functions to make them easier to read. Be sure to load the `dplyr` package before using this.
+
+Take this example. We want to calculate the logarithm of our result column in `df`, then round the result to two decimals. To do this, we have to use `round()` and `log()`
+
+```{r}
+log(df$result) # gives you the log of each result
+
+# wrapping the log function with round, we can tell R how many decimals to round to
+round(log(df$result), digits = 2) 
+```
+
+Now if we do the same thing using pipes, it's a little easier to follow all in one step.
+
+```{r message=FALSE}
+library(dplyr)
+
+df$result %>%
+  log() %>%
+  round(digits = 2)  
+```
+
+Okay, lets apply the pipe operator to formatting our original `dataframe`. In order to do this, we have to use the function `mutate()` to tell R we are trying to reformat the data. 
+
+```{r}
+
+df <- data.frame(patient.ID, result, date, time) # Re-generate your dataframe
+str(df) # remind yourself that the columns are not formatted correctly
+
+# Now apply the formatting using the pipe operator %>%
+
+df<- df %>%
+          mutate(patient.ID = as.character(patient.ID),
+                 result = as.numeric(result),
+                 date = as.character(date), # must be character variable for next step
+                 time = as.character(time), # must be character variable for next step
+                 date.time = mdy_hm(paste(date, time, sep = " ")))
+str(df)
+
+```
+
+### Exercise
+1. Read the file Potassium.csv into a variable called `K.data`. This file contains real K^+^ data extracted from SunQuest from Dan's lab for one month from the two ER bays.  It contains order time, collection time, receive time and result time.  Use the `head()` function to get an idea of how the dates and times are formatted. All the K^+^ results presented were run on an ABL800 whole blood analyzer directly from an unspun PST tube.
+    + Convert the order, receive, and result times into dates
+    + Calculate the order-to-result times and store it a column called TAT ("turn around time"). Use the function `difftime()` to calculate the time difference.
+        + What is the median and IQR of the TAT?
+        + What is the 90th and 99th percentiles of the TAT?
+        + What is the maximum value of TAT?
+    + Calculate the receive-to-result times and store it a column called lab.TAT (the analysis time).
+        + What is the median and IQR of the lab.TAT?
+        + What is the 90th and 99th percentiles of the lab.TAT?
+        + What is the maximum value of lab.TAT? What day did it occur?
+        + What strange finding have you discovered?
+
+```{r, include = FALSE}
+###Solution###
+library(tidyverse)
+K.data <- read.csv("Data_Files/Potassium.csv")
+# this can be done one at a time using the method above, but a more efficient way to go about it is to use `mutate()`
+K.data <- K.data %>% mutate(ORDERED_DATE = dmy_hm(ORDERED_DATE), 
+                            RESULT_DATE= dmy_hm(RESULT_DATE),
+                            RECEIVED_DATE =  dmy_hm(RECEIVED_DATE))  %>%
+  mutate(TAT = difftime(RESULT_DATE, ORDERED_DATE, units = "min"), 
+         lab.TAT = difftime(RESULT_DATE,RECEIVED_DATE, units = "min"))
+
+K.data %>% 
+  arrange(desc(TAT)) %>%
+  head()
+
+K.data %>% 
+  arrange(desc(lab.TAT)) %>%
+  head()
+
+max(K.data$TAT)
+summary(as.numeric(K.data$TAT))
+quantile(K.data$TAT,probs = c(0.9,0.99))
+
+max(K.data$lab.TAT)
+K.data$ORDERED_DATE[which(K.data$lab.TAT==max(K.data$lab.TAT))]
+summary(as.numeric(K.data$lab.TAT))
+quantile(K.data$lab.TAT,probs = c(0.9,0.99))
+
+#Note two things:
+#1)	Scheduled orders are included.
+#2)	There was a LIS downtime on Jan 29/2015.
+```
+
+## Pulling the Strings - manipulating data with grep(), gsub() and regular expressions
+
+In programming, the word 'string' refers to anything treated as text. Strings may be one word or several words, and can include other characters as well. For example, the word "computer" is a string, as is the sentence "I have 4 computers." There are an array of tools in R specifically for working with strings. In general lab data, a string may be a sample identifier, a patient name or hospital admission number, a gender, or a comment on a sample result. We can use strings to build a structure from which to extract information. 
+
+Here we have a list of Sample Identifiers where the prefix "C" indicates a chemistry sample while "H" indicates a hematology sample and "Z" indicates a QC material :
+
+```{r}
+sample.ids <- c("C001", "C002", "H001", "H002", "ZC001", "ZC002", "ZH001", "ZH002")
+```
+
+identify which samples correspond to QC Samples using grep().
+
+```{r}
+library(stringr)
+#returns a TRUE or FALSE to the question "does the string contain the pattern ZC?"
+grepl("Z", sample.ids) 
+#returns the location of strings that contain the patern ZC
+grep("Z", sample.ids)
+
+```
+
+We often want to filter out only the QC or patient data from our datasets, so lets look at how to rename them using `gsub()`
+
+```{r}
+gsub("Z", "QC", sample.ids) #what did this do? 
+gsub("ZC001", "QC", sample.ids) #okay, now we're getting somewhere
+```
+
+This is great, but replacing each string one by one is a little silly. What if we can look for the pattern "Z" followed by any number of other characters and replace them all with "QC"? You can. It's called a "Regular Expression", and just to show you the magic:
+
+```{r}
+gsub("Z.*", "QC", sample.ids) 
+```
+
+Included in this course package is a "Cheat Sheet" which shows you all of the regular expressions and what their uses are. In this case the "." represents "Any Character" while the "*" symbol represents "matches at least 0 times". So in essence, the above script is saying to match any string that contains the pattern "Z" and has any number of characters following it. 
+
+Other useful notations include "^" meaning "begins with, "|" meaning "or", and "&" meaning "and". So few other ways to do the same thing we already did:
+
+```{r}
+gsub("^Z.*", "QC", sample.ids) 
+# Translation: begins with "Z" and has text after - useful to restrict the pattern to look only at strings that start with Z
+gsub("ZC.*|ZH.*", "QC", sample.ids) 
+# Translation: change ZC or ZH containing string to "QC"
+```
+
+if you want to specify Chemistry or Hematology QC, you will need to do multiple replacements and define the varaible each time. 
+
+```{r}
+sample.ids <- gsub("ZC.*", "Chemistry QC", sample.ids)
+sample.ids <- gsub("ZH.*", "Hematology QC", sample.ids)
+sample.ids
+```
+
+Now to identify patient samples as well. Samples starting with "C" are chemistry specimens and those starting with "H" are hematology, then each letter is followed by some series of numbers from 0 to 9. The regular expression for this would be to use "[]" which means "one of".
+
+```{r}
+# This works if there is always a zero after the "C" in the patient result
+gsub("^C0.*", "Patient", sample.ids) 
+
+#works for any number after the "C"
+gsub("^C[0-9].*", "Patient", sample.ids) 
+
+# now we'll include an "or" so we can convert chem and heme samples to "Patient"
+gsub("^C[0-9].*|^H[0-9].*", "Patient", sample.ids)
+
+# side note that this works using letters as well as numbers
+gsub("^[CH]0.*", "Patient", sample.ids) 
+# 1) "^" starts with, 
+# 2) "one of C or H", 
+# 3) followed by a zero and 
+# 4) "." any character, 
+# 5) which appears "*" at least 0 times
+
+gsub("^[A-Z]0.*", "Patient", sample.ids) # this will work with any letters from A to Z
+```
+#####################################################################################################################################
+## Coping with Non-numeric Data
+
+Now that we know how to fix out data, we will want to process the numeric data. To do so, lets use another dataset. This is a made-up QC dataset containing data for liver panel tests Albumin, ALT, Ammonia, Total Bilirubin, and Direct Bilirubin. There are 8 columns including identifiers for Test, Specimen ID, Test Site, QC Mnemonic, QC Lot number, Analyzer Name, Result, and Date/time of result. There are 7 days of QC data in here for three sites from six analyzers, so we're looking at lots of QC data. R can handle much much more than that, but this is a good start.
+
+First, use `read.csv()` to import the data file "QCData_Jun2019.csv" to a dataframe called `qc.data`. Start by surveying the data using `head()` and `str()`
+
+```{r}
+qc.data <- read.csv(file = "Data_Files/QCData_Jun2019.csv", sep = ",")
+str(qc.data)
+# all columns are being imported as Factors because we didn't set stringsAsFactors to FALSE
+head(qc.data) # gives you an idea of the type of data you're dealing with
+```
+
+Okay, now we just have to format the columns as we wish.
+
+```{r results='hide'}
+as.numeric(qc.data$Result) 
+```
+
+Wait--what just happened here? This makes no sense at all. These are all integers between 1 and `r max(as.numeric(qc.data$Result))`. Do you see what has happened?
+
+R's default handling of converting of a factor variable to a numeric variable is to convert it to the number of the factor (1 through `r max(as.numeric(qc.data$Result))` in this case). We personally find this irritating, but it is evidently working as intended.
+
+So the correct thing to do is:
+
+```{r, results = "hide"}
+as.numeric(as.character(qc.data$Result))
+```
+
+The default R behaviour of treating strings as factors can be over--ridden when the csv file is read by specifying `stringsAsFactors = FALSE`, same as the `data.frame()` function we used before. When one does this, the `as.character` part of the expression above is unnecessary.
+
+```{r}
+qc.data <- read.csv(file = "Data_Files/QCData_Jun2019.csv", stringsAsFactors = FALSE) 
+# re-read the data using stringAsFactors = FALSE
+qc.data$Result <- as.numeric(qc.data$Result) 
+str(qc.data) # results are numeric
+head(qc.data) # data looks good
+```
+
+Something else somewhat surprising has happened. What do you notice? See the NA? This is what all non-numerics become, even if one is $<40$ and another is $>200$ ("NA" stands for "not available"). In this case, some text is present within the QC data.  So, be careful. If we want to preserve something of what was actually in the data file, we will need another approach. If we are happy to have all non-numerics display NAs, then what we have here is fine.
+
+But if we now want to look at the statistics of the Results column, the NA results cannot contribute. It would be good to figure out what is going on. In this case, all we want to do is remove the lines of data that are non-numeric because they contain nonsense information, but keep in mind that this may not be the case if you are looking at $>$ or $<$ values in your patient data. You can use `gsub()` to remove or replace these symbols with whatever you desire.
+
+Identify rows of data that contain NA using `is.na()`
+
+```{r results='hide'}
+is.na(qc.data$Result) 
+# this is a logical variable that asks "is this value NA?" 
+# not going to print it, but see the results
+
+```
+
+This uses the function `is.na()` to generate a dataframe containing lines that have NA in the Result column. It's a good idea to use this to check what data you're removing before you actually do it. 
+
+```{r}
+qc.data[is.na(qc.data$Result),] 
+# there are four values in the dataset that are now NA, corresponding to specific sample ID's 
+```
+
+So what we want is to use an $!$ (represents "is not") ahead of the function `is.na()` to result the rows of data that "are not NA"
+
+```{r}
+num.qcdata <- qc.data[!is.na(qc.data$Result),] 
+head(num.qcdata)
+str(num.qcdata) # perfect, no more NAs!
+```
+
+### Exercise
+Let's apply what we just learned using `gsub()` our QC data set. 
+* Replace the short names in the "Test" column  "ALB", "ALT", "AMM", "BILD", and "BILT" with their full names.
+* Format the Result_Date column as a date using `lubridate()` as we did before.
+
+```{r results = 'hide', echo = FALSE}
+num.qcdata$Test <- gsub("ALB", "Albumin", num.qcdata$Test)
+num.qcdata$Test <- gsub("ALT", "Alanine Aminotransferase", num.qcdata$Test)
+num.qcdata$Test <- gsub("AMM", "Ammonia", num.qcdata$Test)
+num.qcdata$Test <- gsub("BILD", "Bilirubin, Direct", num.qcdata$Test)
+num.qcdata$Test <- gsub("BILT", "Bilirubin, Total", num.qcdata$Test)
+```
+
+# Lesson 4: Meet the 'tidyverse' - Gather, Join, Filter, and Clean
+
+There is a paradigm of R programming referred to as the "tidyverse" that is particularly useful for certain types of data summary and data visualization. It allows for rapid-high level commands accomplishing a great deal in few lines of highly readable code. The challenge of using tidyverse packages is that they are under very rapid development and this can mean that updates in the packages can cause your code to stop functioning. Additionally, many statistical packages use traditional "base R" and they may not cooperate with tidyverse output. However, in the context of our work in health care, we are usually doing fairly simple one-off reports for research or answering a specific question so using the tidyverse makes sense. 
+
+## `gather()` and `spread()`
+Now that we are in the tidyverse, the first thing we want to introduce is what is meant by "tidy data".
+
+When humans prepare spreadsheet data, they typically have each row represent all the observations on single subject. This is usually pretty easy to look at but it happens to have a number of disadvantages from a statistical programming standpoint.
+
+For example, in traditional "untidy" data, you might have each subject on a row and all of their lab tests represented as columns: Sodium, Potassium, Chloride, Bicarbonate, Creatinine, pH, Troponin etc. But in the tidy data paradigm, all of the blood tests should be factors under a single column labelled "Test" and then each row represents a single observation, not a single patient. 
+
+It is frequently necessary to jump back and forth between the traditional view, which we call "data wide" and the tidy view which we call "data long". This is accomplished with the functions `gather()` and `spread()`.
+
+Let's starting exploring these funtions by reading in some data on "anthropometric" (for want of a better term) [measurements on opossum](https://rdrr.io/cran/DAAG/man/fossum.html).
+
+```{r message=FALSE}
+possum <- read_csv("Data_Files/possum.csv") 
+# note we used read_csv here (a tidyverse function) instead of read.csv() from base R.
+# for the most part, the difference between read.csv() and read_csv() is minimal, 
+# however:read_csv() is faster and does not require stringsAsFactors = FALSE to be 
+# specified.
+
+head(possum) # the anthropomorphic measurements of the possums are wide form
+
+```
+
+We can convert them to data long format with the `gather()` function. In the this function we must determine three things:
+
+1. What columns are to be gathered together as factors of a similar type?--This parameter referred to as the "key" and in our output the column will be named "Possum_Metric".
+2. What do you want to call the column that contains the associated values?--This parameter is referred to as the "value" and in our output the column will be named "Result".
+3. Which columns (by name or number) are to be gathered?--In this case it is columns 7--15. You can also denote which columns you *don't* want gathered -- so we could also write this as "-c(1:6)".
+
+```{r}
+possum.long <- gather(possum, key = Possum_Metric, value = Result, 7:15)
+head(possum.long,10)
+```
+
+As it turns out, this permits very slick calculations which allow you to rapidly generate summary statistics based on variables of your choosing.
+```{r}
+#long data permits rapid calculations
+group_by(.data = possum.long, key = Possum_Metric) %>%
+  summarise(Mean = mean(Result),
+            SD = sd(Result),
+            "%CV" = (100*sd(Result)/mean(Result)))
+```
+and plots:
+```{r}
+#long data permits rapid visualizations (which we will cover later)
+library(ggplot2)
+p <- ggplot(possum.long, aes(x = Result, fill = Possum_Metric)) + 
+  geom_density(alpha = 0.3, color = NA) 
+p
+```
+
+If we want to convert back to 'untidy' data, this is accomplished by `spread()`. For this function again we need to determine our "key" and "value" columns:
+
+1. The "key" column will be "spread" across the top of the table (this column becomes the column names).
+2. The "value" column contains the values we want to populate these new columns.
+
+```{r}
+possum.wide <- spread(possum.long, key = Possum_Metric, value = Result)
+head(possum.wide, 10)
+```
+
+### Exercise
+
+Using the `num.qc` dataset you generated earlier, summarise the QC data running means and SDs according to test, qc mnemonic, and site to a new dataframe called `qc.means`.
+
+```{r, message = FALSE, warning = FALSE, echo=FALSE, results='hide'}
+# Gives the desired output, but doesn't account for the different sites, QC levels, or analyzers
+qc.means <- group_by(num.qcdata, key = Test) %>%
+              summarise(Mean = mean(Result),
+                        SD = sd(Result),
+                        "%CV" = (100*sd(Result)/mean(Result)))
+qc.means
+```
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+# Here's something we can work with. Now we have a running mean, sd, and CV for the 7 days of QC for all levels of QC and from each site, down to the analyzer name.
+qc.results <- num.qcdata %>%
+                  group_by(Test, QC_Mnemonic, Site, Analyzer) %>%
+                  summarise(N = length(Result), # tells how many QC results are in the table
+                            Mean = round(mean(Result), 2), # the mean of those QC results
+                            SD = round(sd(Result), 3),
+                            "%CV" = round(100*sd(Result)/mean(Result), 1))
+head(qc.results)
+
+# if you want to see all results, you can print `qc.results` yourself. 
+```
+
+## `arrange()`, `filter()`, and `select()`
+
+When calculating our running means and SD's we will want to filter and orgaize our data to be sure we have the right data being calculated. We will do this using the `num.qcdata` There are some more very useful and simple functions in the tidyverse which we will need before we get too much further.  
+
+The first is `arrange()` and it does pretty much what you think it would. Let's try it out on the QC data:
+```{r results='hide'}
+arrange(num.qcdata, Site)
+```
+
+If we want to arrange from largest to smallest, we would ask for the ages in descending `desc()` order:
+
+```{r results='hide'}
+arrange(num.qcdata, desc(Site))
+```
+
+What happens if we `arrange()` something that is not a character?
+```{r results='hide'}
+arrange(num.qcdata, Result) # numeric variable
+arrange(num.qcdata, Result_Date) # date variable
+```
+
+Next up, `filter()` and `select()`. Filtering means choosing *rows* while selecting means choosing *columns*. You can filter rows based on what the rows contain, but you can only select columns by name or position.
+
+```{r results='hide'}
+filter(num.qcdata, Site == "B") # all results from site B
+filter(num.qcdata, Result < 10) # all results less than 10
+
+# if you want to filter by multiple criteria, join the filter criteria using `&`
+filter(num.qcdata, Site == "A" & Test == "AMM" & QC_Mnemonic == "CBALC1")
+
+# if you want to include multiple sites in your output, use the "or" symbol, "|"
+filter(num.qcdata, Site == "A" | Site == "B")
+
+# alternatively, you can exclude a Site and/or a QC using !=
+filter(num.qcdata, Site != "A" & QC_Mnemonic != "CBALC1")
+
+# can also filter by date range
+filter(num.qcdata, Result_Date >= "2018-06-01" & Result_Date < "2018-06-04")
+```
+
+```{r results='hide'}
+select(num.qcdata, Test, Site, Result) # returns the named columns
+select(num.qcdata, 1:7) # returns columns 1 to 7
+```
+
+### Exercise
+* From the num.qcdata data, create a table which only has the specimen number, site, Analyzer, and result for Albumin CBLIQ1 QC run on June 3, 2018. Arrange this table by site, then Analyzer
+
+```{r, echo = FALSE, eval = FALSE}
+##SOLUTION
+
+qc.table <- filter(num.qcdata, Test == "Albumin" & QC_Mnemonic == "CBLIQ1" & Result_Date >= "2018-06-03" & Result_Date < "2018-06-04")
+qc.table <- select(qc.table, Spec_Num, Site, Analyzer, Result)
+qc.table <- arrange(qc.table, Site, Analyzer)
+
+```
